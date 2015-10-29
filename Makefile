@@ -1,15 +1,15 @@
 include ../Make.defines
 
 PROGS =	server.prog
-OBJS = server.o 
+OBJS = server.o rtt.o
 
 
 all: ${PROGS}
 
-%.prog: %.o
-	${CC} ${FLAGS} -o $@ $< ${LIBS}
+%.prog: ${OBJS}
+	${CC} ${FLAGS} -o $@ ${OBJS} ${LIBS}
 
-%.o: %.cpp
+%.o: %.c
 	${CC} ${CFLAGS} -c $< -o $@
 
 .PHONY: clean
