@@ -9,6 +9,20 @@ const int dataMaxLen = 512 - 5*(sizeof(int));
 int readFileContents(char *, int );
 static void	sig_alrm(int signo);
 
+unsigned int
+alarm (unsigned int useconds)
+{
+    struct itimerval old, new;
+    new.it_interval.tv_usec = 0;
+    new.it_interval.tv_sec = 0;
+    new.it_value.tv_usec = (long int) useconds;
+    new.it_value.tv_sec = 0;
+    if (setitimer (ITIMER_REAL, &new, &old) < 0)
+        return 0;
+    else
+        return old.it_value.tv_sec;
+}
+
 typedef struct dgram
 {
 	int seqNum;
@@ -116,7 +130,7 @@ main(int argc, char **argv)
 
 
 
-int readFileContents(char *fileName, int windowSize){
+int readFileContents(char *fileName, int windowsize){
 	FILE *fp = fopen(fileName, "r");
     int seq=0, i;
 
@@ -146,7 +160,7 @@ int readFileContents(char *fileName, int windowSize){
         // Assign contents for a particular packet
         
         packet.seqNum = seq++;
-        packet.windowSize = windowSize;
+        packet.windowsize = windowsize;
         strcpy(packet.data,buff);
         packet.dataLen = i;
         packet.eof = 0;
@@ -170,6 +184,7 @@ int sendFileContents(int sockfd, struct sockaddr_in cliaddr, int len, int totalb
 	int recv_ack = -1;
 	int retransmit = 0;
 	int rtt_measured_packet = 0;
+	uint32_t	ts;	
 
 	Signal(SIGALRM, sig_alrm);
 	if (rttinit == 0) {
@@ -183,7 +198,7 @@ int sendFileContents(int sockfd, struct sockaddr_in cliaddr, int len, int totalb
 		sendAgainFirstUnackPos:
 		if(retransmit)
 		{	// will serve also as a probe
-			Sendto(sockfd, (void *)&fileContent[first_unacknowledged_pos], sizeof(dgram), 0, (SA *) &cliaddr, len);
+			Sendto(sockfd, (void *)&fileContent[first_unacknowledged_pos], sizeof(struct dgram), 0, (SA *) &cliaddr, len);
 		}
 
 		if (sigsetjmp(jmpbuf, 1) != 0) {
@@ -204,14 +219,15 @@ int sendFileContents(int sockfd, struct sockaddr_in cliaddr, int len, int totalb
 		while(pos_sent < totalblocks && pos_sent + 1 < first_unacknowledged_pos + windowsize){
 			if(firstPacketSent){
 				firstPacketSent = 0;
-				alarm(rtt_start(&rtt_info));
+				alarm(rtt_start(&rttinfo));
+				ts = rtt_ts(&rttinfo);
 				rtt_measured_packet = pos_sent+1;
 			}
-			Sendto(sockfd, (void *)&fileContent[pos_sent+1], sizeof(dgram), 0, (SA *) &cliaddr, len);
+			Sendto(sockfd, (void *)&fileContent[pos_sent+1], sizeof(struct dgram), 0, (SA *) &cliaddr, len);
 			pos_sent++;
 		}
 
-		if(Recvfrom(sockfd, &recv_packet, sizeof(dgram), 0, (SA *) &cliaddr, &len)){
+		if(Recvfrom(sockfd, &recv_packet, sizeof(struct dgram), 0, (SA *) &cliaddr, &len)){
 			windowsize = recv_packet.windowsize;
 			if(recv_packet.ack == recv_ack){
 				dups++;

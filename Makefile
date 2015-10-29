@@ -3,7 +3,6 @@ include ../Make.defines
 PROGS =	server.prog
 OBJS = server.o rtt.o
 
-
 all: ${PROGS}
 
 %.prog: ${OBJS}
