@@ -200,13 +200,13 @@ int sendFileContents(int sockfd, struct sockaddr_in cliaddr, int len, int totalb
 			goto sendAgainFirstUnackPos;
 		}
 
-		if(dups == 0 && windowsize != 0){
-			// new packets would be sent now
-			alarm(rtt_start(&rttinfo));
-			rtt_measured_packet = fileContent[pos_sent+1].seqNum;
-		}
-
+		int firstPacketSent = 1;
 		while(pos_sent < totalblocks && pos_sent + 1 < first_unacknowledged_pos + windowsize){
+			if(firstPacketSent){
+				firstPacketSent = 0;
+				alarm(rtt_start(&rtt_info));
+				rtt_measured_packet = pos_sent+1;
+			}
 			Sendto(sockfd, (void *)&fileContent[pos_sent+1], sizeof(dgram), 0, (SA *) &cliaddr, len);
 			pos_sent++;
 		}
@@ -222,7 +222,7 @@ int sendFileContents(int sockfd, struct sockaddr_in cliaddr, int len, int totalb
 
 				
 			recv_ack = recv_packet.ack;
-			if(recv_ack >= rtt_measured_packet ){
+			if(recv_ack > rtt_measured_packet ){
 				alarm(0);
 				rtt_stop(&rttinfo, rtt_ts(&rttinfo) - ts);
 			}
