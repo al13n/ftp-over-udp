@@ -235,10 +235,14 @@ int sendFileContents(int sockfd, struct sockaddr_in cliaddr, int len, int totalb
 				goto sendAgainFirstUnackPos;
 			}
 			
+		}
+
+		if(fileContent[first_unacknowledged_pos-1].eof){
+			break;
 		}		
 	}
 
-	
+	return totalblocks;	
 }	
 
 static void sig_alrm(int signo){
