@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <setjmp.h>
-
+#include <string.h>
 /*
  * External Functions
  */
@@ -91,6 +91,8 @@ main(int argc, char **argv)
 	int sock_count = 0;
 	int loopback = FALSE;
 	int window_size;
+	int local = FALSE;
+	uint64_t netopt = 0;
 
 	if( (fp = fopen("client.in", "r")) == NULL)
 	{
@@ -100,20 +102,20 @@ main(int argc, char **argv)
 
 	while (fgets(buf, MAX_LINE -1, fp) != NULL)
         {
-                //printf("fgets loop %d\n", count);
 		switch(count){
 			case 0:
-				strncpy(IPserver, buf, strlen(buf)-1);
+				memset(IPserver, 0, MAXLINE);
+				strncpy(IPserver, buf, strlen(buf)-2);
 				break;
 			case 1:
 				server_port = atoi(buf);
 				break;
 			case 2:
+				memset(filename, 0, MAXLINE);
 				strncpy(filename, buf, strlen(buf)-1);
 				
 				break;
 			case 3:
-				//TODO: adding Receving sliding-window size
 				maxWindowSize = atoi(buf);
 				break;
 			case 4: 
@@ -141,11 +143,15 @@ main(int argc, char **argv)
 	client_info.seed = seed;
 	client_info.probability_loss = probability_loss;
 	client_info.mean_time = mean_time;
-#if(1)
+#if(DEBUG)
 	/* Debug Info */
 	printf("CLIENT: client_info.IPserver: %s\n", client_info.IPserver);
 	printf("CLIENT: client_info.filename: %s\n", client_info.filename);
 #endif
+
+
+	/* stdout */
+        printf("\nCLIENT:\t\tsock descripts information\n");
 
 	for (ifihead = ifi = Get_ifi_info_plus( AF_INET, 1);
                 ifi != NULL;
@@ -158,13 +164,19 @@ main(int argc, char **argv)
                 sock_desc[sock_count].sockfd = -1;
                 sock_desc[sock_count].ip_addr = sa;
                 sock_desc[sock_count].net_mask = (struct sockaddr_in *)ifi->ifi_ntmaddr;
-#if(1)
-		/* Debug Info */
-                printf("CLIENT: sock_desc[sock_count] IP: %s\n", Sock_ntop(sock_desc[sock_count].ip_addr, sizeof(struct in_addr)));
-                printf("CLIENT: Network mask: %s\n", Sock_ntop(sock_desc[sock_count].net_mask, sizeof(struct in_addr)));
-#endif
+
+		sock_desc[sock_count].subnet = (struct sockaddr_in *)malloc( sizeof(struct sockaddr_in));
+		sock_desc[sock_count].subnet->s_addr =  sock_desc[sock_count].ip_addr->s_addr & sock_desc[sock_count].net_mask->s_addr;
+		
+		/* stdout */
+                printf("CLIENT: sock_desc[%d] IP: %s\n", sock_count, sock_ntop_host((SA *)sock_desc[sock_count].ip_addr, sizeof( struct in_addr)));
+                printf("CLIENT: sock_desc[%d] NetMask: %s\n",sock_count, Sock_ntop_host(sock_desc[sock_count].net_mask, sizeof(struct in_addr)));
+		printf("CLIENT: sock_desc[%d] SubNet Mask: %s\n", sock_count,  Sock_ntop_host(sock_desc[sock_count].subnet, sizeof(struct in_addr)));
+		printf("\n");
+
 		sock_count++;
 	}
+
 
 	/* Identify Loopback */	
 	for(i=0; i < sock_count; i++)
@@ -172,57 +184,75 @@ main(int argc, char **argv)
 		char IPbuf[MAXLINE];
 		char *p;
 		char *p1;
+#if(DEBUG)
 		printf("CLIENT: 1st %s\n", Sock_ntop_host( (SA *)sock_desc[i].ip_addr, sizeof( struct in_addr *)));
 		printf("CLIENT: 2nd %s\n", client_info.IPserver);
-
+#endif
 		p = sock_ntop( (SA *)(sock_desc[i].ip_addr), sizeof( struct in_addr *));
 		
 		p1 = strtok(p, ":");
-		printf("CLIENT: debug sock_desc.ip_addr = %s\n",p1 );
+#if(DEBUG)
+		//printf("CLIENT: sock_desc.ip_addr = %s\n",p1 );
+		printf("CLIENT: p1 = %s\n", p1);
+		printf("CLIENT: client_ino.IPserver = %s\n", client_info.IPserver);
+#endif
 
-		if (strcmp(p1, client_info.IPserver) == 0)
+		if( strcmp(p1, client_info.IPserver) == 0)
 		{
+			printf("CLIENT: Loopback case\n");
 			loopback = TRUE;
 			strcpy(IPserver, "127.0.0.1\n");
 			strcpy(sock_desc[i].ip_addr, IPserver);
 			strcpy(IPclient, IPserver);
-			printf("CLIENT: Loopback case\n");
 			break;
 		}
 		else
 		{
-			struct in_addr ip, netmask, subnet1, subnet2, server_ip, longest_prefix_ip, longest_prefix_netmask;
+			struct in_addr ip, netmask, subnet1, subnet2, serv_ip, longest_prefix_ip, longest_prefix_netmask;
         		char prefix1[MAXLINE], prefix2[MAXLINE], str_longest_prefix_ip[MAXLINE], str_longest_prefix_netmask[MAXLINE];
 			
 			ip =(struct in_addr)((struct sockaddr_in *)(sock_desc[i].ip_addr))->sin_addr;
 			netmask = (struct in_addr) ((struct sockaddr_in *)(sock_desc[i].net_mask))->sin_addr;
+			
 			subnet1.s_addr = ip.s_addr & netmask.s_addr;
-
+			//subnet1 = (struct in_addr)((struct sockaddr_in *)(sock_desc[i].subnet))->sin_addr;
+			
                         inet_ntop(AF_INET, &subnet1, prefix1, MAXLINE);
-                        inet_pton(AF_INET, client_info.IPserver, &server_ip);
-                        subnet2.s_addr = server_ip.s_addr & netmask.s_addr;
+			
+
+			inet_pton(AF_INET, client_info.IPserver, &serv_ip);
+			
+                        subnet2.s_addr = serv_ip.s_addr & netmask.s_addr;
+
                         inet_ntop(AF_INET, &subnet2, prefix2, MAXLINE);
 
-                        if (strcmp(prefix1, prefix2) == 0){
+
+                        if (strncmp(prefix1, prefix2, strlen(prefix1)) == 0){
                                 if (netmask.s_addr > longest_prefix_netmask.s_addr){
-                                        longest_prefix_ip = server_ip;
+                                        longest_prefix_ip = serv_ip;
                                         longest_prefix_netmask = netmask;
 				
 					inet_ntop( AF_INET, &longest_prefix_ip, IPserver, MAXLINE);
-
-#if(1)
-					/* Debug Info */
+					local = TRUE;
+					/* stdout */
                                         inet_ntop(AF_INET, &longest_prefix_ip, str_longest_prefix_ip, MAXLINE);
-                                        printf("CLIENT: longest_prefix_ip = %s\n",str_longest_prefix_ip);
+                                        printf("CLIENT: longest prefix ip = %s\n",str_longest_prefix_ip);
                                         inet_ntop(AF_INET, &longest_prefix_netmask, str_longest_prefix_netmask, MAXLINE);
-                                        printf("CLIENT: longest_prefix_netmask = %s\n",str_longest_prefix_netmask);
-#endif
-                                }
+                                        printf("CLIENT: longest prefix netmask = %s\n",str_longest_prefix_netmask);
+                               		printf("\n");
+				 }
                         }
 		}
+		free( sock_desc[sock_count].subnet );
 	}
 
-#if(0 )	
+	if( (loopback == TRUE) || (local == TRUE))
+	{
+		netopt = SO_DONTROUTE;
+		printf("CLIENT: Server IP is \"local\" network\n");
+	}
+
+#if(DEBUG)	
 	/* Debug info */
 	printf("CLIENT: IPserver : %s\n",IPserver);
 
@@ -242,24 +272,27 @@ main(int argc, char **argv)
 	cliaddr.sin_port = htons(0);
 
 	sockfd = Socket(AF_INET, SOCK_DGRAM, 0);
-	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR & netopt, &on, sizeof(on));
 	Bind( sockfd, (SA *)&cliaddr, sizeof(cliaddr));
+#if(DEBUG)
 	printf("CLIENT: passing Bind()\n");
-
+#endif
 	if(getsockname (sockfd, (SA *) &servaddr1, &servaddr1_len) < 0)
 	{
 		perror("Client information could not be obtained");
 		exit(0);
 	}
+#if(DEBUG)
 	printf("CLIENT: passing getsockname()\n");
-
+#endif
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(client_info.server_port);
 
 	inet_pton(AF_INET, client_info.IPserver, &(servaddr.sin_addr));
 	Connect(sockfd, (SA *) &servaddr, sizeof(servaddr));
+#if(DEBUG)	
 	printf("CLIENT: passing Connect()\n");
-
+#endif
 	bzero(&servaddr1, sizeof(servaddr1));
 	if( getpeername(sockfd, (SA *) &servaddr1, &servaddr1_len) < 0)
 	{ 
@@ -269,11 +302,12 @@ main(int argc, char **argv)
 	
 	strcpy(sendline, client_info.filename);
 	sprintf(sendline, "%s %d", client_info.filename, client_info.sliding_window_size);
-	printf("CLIENT: sending message %s\n", sendline);
 	Sendto(sockfd, sendline, strlen(sendline), MSG_DONTROUTE, 0, 0);
+#if(DEBUG)
+	printf("CLIENT: sending message %s\n", sendline);
 	printf("CLIENT: passing Sendto()\n");
-
-#if(1)
+#endif
+#if(DEBUG)
 	/* Test tracking client IP */
 	sleep(1);
 	Sendto(sockfd, sendline, strlen(sendline), MSG_DONTROUTE, 0, 0);
@@ -284,10 +318,11 @@ main(int argc, char **argv)
 	
 	/* receving PORT */
 	Recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL);
+#if(DEBUG)
 	printf("ClIENT: recevied port %s \n", recvline);
-	
+#endif	
 	servaddr1.sin_port = (uint16_t)atoi(recvline);
-#if(1)
+#if(DEBUG)
 	/* For Debug */
 	char IPbuf[MAXLINE];
 	printf("CLIENT: get port num %d \n",(uint16_t)servaddr1.sin_port);
@@ -300,7 +335,7 @@ main(int argc, char **argv)
 		exit(1);	
 	}	
 	
-#if(1)
+#if(DEBUG)
 	/* For Debug */
 	struct sockaddr_in sa1;
         socklen_t sa1_len = sizeof(sa1);
@@ -322,17 +357,14 @@ main(int argc, char **argv)
 	printf("CLIENT: client  access to port: %d\n", (uint16_t)(sa2.sin_port));
 #endif
 	/* ACK */
-	strncpy(sendline, "I AM ACKNOWLMENT!\n", 15);
+	char *a = "I am ack";
+	strncpy(sendline, a, strlen(a) );
 	Sendto(sockfd, sendline, strlen(sendline), MSG_DONTROUTE, 0, 0);
+#if(DEBUG)	
 	printf("CLIENT: sending ACK\n");
-
+#endif
 	/* File transfer */
-	//Recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL);
-	//struct dgram recvDgram;
-	//Recvfrom(sockfd, &recvDgram, sizeof(recvDgram), 0, NULL, NULL);
-	//printf("CLIENT: receving msg of file : %s %d\n", recvDgram.data, recvDgram.seqNum);
 	receive_file(sockfd);
-	//while(1);
 }
 
 int receive_file(int sockfd){

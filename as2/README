@@ -1,42 +1,22 @@
 
-  This directory contains the modified code that permits us to pick up the
-  network masks using the ioctl version of get_ifi_info (Chapter 17).
-
-  Modifications have been introduced to the following files
-  (w.r.t. ~cse533/Stevens/unpv13e):
-
-  1. lib/get_ifi_info.c        here named      get_ifi_info_plus.c
-  2. lib/unpifi.h              here named      unpifiplus.h
-  3. ioctl/prifinfo.c          here named      prifinfo_plus.c
 
 
-  Modifications in file get_ifi_info_plus.c:
-  ------------------------------------------
-
-  function  get_ifi_info   renamed  get_ifi_info_plus
-                (plus, slight modification in the code)
-
-  function  Get_ifi_info   renamed  Get_ifi_info_plus
-                (but no modification in the code itself,
-                 except for having it call get_ifi_info_plus
-                 instead of get_ifi_info)
-
-  function  free_ifi_info  renamed  free_ifi_info_plus
-                (plus, slight modification in the code)
+				README
+Team Members
+- Dongju Ok (#110012445)
+: I implement the operation part of assignment 2.
 
 
-  Modifications in file unpifiplus.h:
-  -----------------------------------
 
-  extra field introduced in structure ifi_info for sockaddr structure
-  that holds network mask
+Explanation of Assignment 2
+1. Item 1 of the section Operation
+: I establish struct socket_descripts for following information of each socket in client side. We may get sockfd, ip_addr and net_mask member of this sturuct from Get_ifi_info_plus function which the professor give us. Next step, we should calculate subnet address through ip_addrs & net_mask. At this point, according to the instruction, we would get longest prefix subnet mask address. This is because that when server and client is connected in same local network, we should use ip_addr and net_mask with longest prefix subnet mask due to decreasing packet in the network. I will explain how to get longest subnet mask. In the client side, each multi-homed IP is calculated by BIT AND operation with their own net_mask. Also, host IP address is calculated with same way of the previous case. If both output is same, host and client should be in same local network. We may do iterlatively with every multi-homed IPs. After that, the biggest sbunet mask(i.e. the longest subnet mask) is determined, and its ip_addr and net_mask can be used as the client address to access the host.   
 
-
-  Modifications in file prifinfo_plus.c:
-  --------------------------------------
-
-  function  prifinfo  renamed  prifinfo_plus  (plus slight
-       modification in code so as to print out network mask)
-
-
+struct socket_descripts
+{
+	int sockfd;
+	struct in_addr *ip_addr;
+	struct in_addr * net_mask;
+	struct in_addr *subment;
+}
 

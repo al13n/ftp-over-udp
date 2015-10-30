@@ -119,7 +119,7 @@ main(int argc, char **argv)
 		sock_desc[sock_count].ip_addr = sa;
 		sock_desc[sock_count].net_mask = (struct sockaddr_in *)ifi->ifi_ntmaddr;
 
-		printf("SERVER: sockdesc[%d]\n", sock_count);
+		//printf("SERVER: sockdesc[%d]\n", sock_count);
 		printf("SERVER: IP: %s\n", Sock_ntop(sock_desc[sock_count].ip_addr, sizeof(struct in_addr)));
 		printf("SERVER: Network mask: %s\n", Sock_ntop(sock_desc[sock_count].net_mask, sizeof(struct in_addr)));
 		//printf("SERVER: sockdesc[%d]\n", sock_count); 
@@ -153,7 +153,7 @@ main(int argc, char **argv)
 		for(i = 0; i < sock_count; i++)
 			FD_SET(sock_desc[i].sockfd, &rset);
 
-		printf("SERVER: waiting using select()\n");
+		//printf("SERVER: waiting using select()\n");
 		
 		if( (nready=select(maxfd+1, &rset, NULL, NULL, NULL)) < 0 )
 		{
@@ -175,11 +175,11 @@ main(int argc, char **argv)
 				int client_window_size;
 				len = sizeof(cliaddr);
 				
-				printf("SERVER: before revefrom func()\n");	
+				//printf("SERVER: before revefrom func()\n");	
 				n = recvfrom(sock_desc[i].sockfd, recvline, MAXLINE, 0, (SA *) &cliaddr, &len);
 				sscanf(recvline, "%s %d", filename, &client_window_size);
-				printf("%s %d\n", filename, client_window_size);
-				printf("SERVER: first message is recevied: %s\n", recvline);
+				//printf("%s %d\n", filename, client_window_size);
+				//printf("SERVER: first message is recevied: %s\n", recvline);
 				
 				r = search_list(cliaddr, NULL);
 				if( r != NULL)
@@ -192,7 +192,7 @@ main(int argc, char **argv)
 					exit(1);
 				}      
 				inet_ntop( AF_INET, &(server_addr.sin_addr), IPserver, MAXLINE);
-				printf("SERVER: IPserver after receving filename: %s\n", IPserver);
+				//printf("SERVER: IPserver after receving filename: %s\n", IPserver);
 
 				
 				inet_pton( AF_INET, IPserver, &child_server_addr.sin_addr );	
@@ -203,7 +203,13 @@ main(int argc, char **argv)
 
 				if ( (pid = fork() ) == 0)
 				{
-					printf("%d %d\n", max_sending_window_size, client_window_size);
+					int j;
+					for(j=0; j < sock_count; j++)
+					{
+						if(i!=j)
+							close(sock_desc[j].sockfd);
+					}
+					//printf("%d %d\n", max_sending_window_size, client_window_size);
 					max_sending_window_size = min(max_sending_window_size, client_window_size);
 					handshake(sock_desc[i].sockfd,&child_server_addr, sizeof(child_server_addr), &cliaddr, sizeof(cliaddr),  filename, max_sending_window_size );
 					del_list(cliaddr);
