@@ -421,15 +421,16 @@ int readFileContents(char *fileName, int windowsize){
         //printf("WTF\n");
         strcpy(packet.data,buff);
         //printf("WTF\n");
-        packet.eof = 0;
+        packet.eof = eof;
         packet.ack = 1;
         fileContent[seq-1] = packet;
         //printf("%d : %s\n", fileContent[seq-1].seqNum, fileContent[seq-1].data);
         //printf("%d : %s\n", seq-1, buff);
         if(eof){
-            packet.eof=1;
             break;
         }
+
+        
     }
 
     printf("---Read %d blocks from file----\n", seq);
@@ -440,12 +441,16 @@ int sendFileContents(int sockfd,int totalblocks, int windowsize){
 	//printf("%d\n", totalblocks);
 	int first_unacknowledged_pos = 0;
 	int pos_sent = -1; 
+	int prev_ack = 0;
 	struct dgram recv_packet;
 	int dups = 0;
 	int recv_ack = -1;
 	int retransmit = 0;
 	int rtt_measured_packet = 0;
 	uint32_t	ts;	
+	int starttimer = 1;
+	int hasBeenRtransmitted = 0;
+	int slow_start = 1;
 
 	Signal(SIGALRM, sig_alrm);
 	if (rttinit == 0) {
@@ -455,76 +460,84 @@ int sendFileContents(int sockfd,int totalblocks, int windowsize){
 	}
 
 	while(1){
-		//printf("HERE-retransmit\n");
-		sendAgainFirstUnackPos:
-		if(retransmit)
-		{	// will serve also as a probe
-			printf("Retransmit Packet\n");
-			//rtt_debug(&rttinfo);
-			Sendto(sockfd, (void *)&fileContent[first_unacknowledged_pos], sizeof(struct dgram), 0, NULL, NULL);
-		}
+
+		retransmitpack:
+			if(retransmit){
+				printf("RETRANSMIT PACKET: %d\n", first_unacknowledged_pos);
+				hasBeenRtransmitted = 1;
+				slow_start = 1;
+				Sendto(sockfd, (void *)&fileContent[first_unacknowledged_pos], sizeof(struct dgram), 0, NULL, NULL);
+				retransmit = 0;
+			}
 
 		if (sigsetjmp(jmpbuf, 1) != 0) {
+			//rtt_debug(&rttinfo);
 			if (rtt_timeout(&rttinfo) < 0) {
-				err_msg("no response from server, giving up");
-				rttinit = 0;	/* reinit in case we're called again */
+				err_msg("no response from client, giving up");
+				rttinit = 0;	 
 				errno = ETIMEDOUT;
 				return(-1);
 			}
 			retransmit = 1;
-			goto sendAgainFirstUnackPos;
+			goto retransmitpack;
 		}
 
-		int firstPacketSent = 1;
-		//printf("%d\n", totalblocks);
-		printf("%d %d %d %d\n", pos_sent, totalblocks-1, first_unacknowledged_pos, windowsize);
-		while( (pos_sent < totalblocks-1) && (pos_sent + 1 < first_unacknowledged_pos + windowsize)){
-			if(firstPacketSent){
-				firstPacketSent = 0;
+		int sent_packets = 0;
+		while( (0 < slow_start) && (pos_sent < totalblocks-1) && (pos_sent + 1 < first_unacknowledged_pos + windowsize)){
+
+			if(starttimer){
+				rtt_newpack(&rttinfo);
 				alarm(rtt_start(&rttinfo));
 				ts = rtt_ts(&rttinfo);
-				rtt_measured_packet = pos_sent+1;
+				starttimer = 0;
+				rtt_measured_packet = fileContent[pos_sent+1].seqNum;
+				hasBeenRtransmitted = 0;
 			}
-			printf("SEND MESSAGE PACKET: %d\n", fileContent[pos_sent+1].seqNum);
-			//printf("%d\n", rtt_ts(&rttinfo));
-			//rtt_debug(&rttinfo);
-			printf("%d %d %d %d\n", pos_sent, totalblocks-1, first_unacknowledged_pos, windowsize);
-			//printf("%s\n", fileContent[pos_sent+1].data);
+
 			Sendto(sockfd, (void *)&fileContent[pos_sent+1], sizeof(struct dgram), 0, NULL, NULL);
+			printf("SEND PACKET: %d\n", pos_sent+1);
 			pos_sent++;
+			slow_start--;
 		}
-		//sleep(100);
 
-		if(Recvfrom(sockfd, &recv_packet, sizeof(struct dgram), 0, NULL, NULL)){
-
+		if(Recvfrom(sockfd, &recv_packet, sizeof(struct dgram), 0, NULL, NULL) < 0){
+			err_msg("Receive error from client");
+			return -1;
+		}
+		else{
+			//rtt_debug(&rttinfo);
 			windowsize = recv_packet.windowsize;
 			if(recv_packet.ack == recv_ack){
 				dups++;
 			}
 			else {
 				dups = 0;
-			}
-
-				
+			}	
 			recv_ack = recv_packet.ack;
-			if(recv_ack > rtt_measured_packet ){
+			printf("RECEIVED ACK: %d\n", recv_ack);
+			if(dups == 0){
 				alarm(0);
+				if(!hasBeenRtransmitted && recv_ack > rtt_measured_packet)
 				rtt_stop(&rttinfo, rtt_ts(&rttinfo) - ts);
+				starttimer = 1;
+				slow_start += 2*(recv_ack - prev_ack);
 			}
-
+			prev_ack = recv_ack;
 			first_unacknowledged_pos = recv_packet.ack;
 			retransmit = 0;
 			if(dups >= MAXDUPS){
 				// retransmit first unack pos
 				retransmit = 1;
-				goto sendAgainFirstUnackPos;
+				goto retransmitpack;
 			}
 			
 		}
 
 		if(fileContent[first_unacknowledged_pos-1].eof){
+			printf("SUCCESS: SENT ENTIRE FILE\n");
 			break;
-		}		
+		}	
+
 	}
 
 	return totalblocks;	

@@ -26,6 +26,7 @@
 #include "unpifiplus.h"
 #include "global.h"
 #include "unpthread.h"
+#include "unprtt.h"
 #include <math.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -42,16 +43,24 @@ free_ifi_info_plus(struct ifi_info *ifihead);
 static void	sig_alrm(int);
 void * consumerThread(void *);
 int receive_file(int );
+int data_loss();
 static sigjmp_buf	jmpbuf;
 int seed, mean;
+static struct rtt_info   rttinfo;
+static int	rttinit = 0;
 
 unsigned int alarm (unsigned int useconds)
 {
-    struct itimerval old, new;
+    struct itimerval old, new, value;
     new.it_interval.tv_usec = 0;
     new.it_interval.tv_sec = 0;
     new.it_value.tv_usec = (long int) useconds;
     new.it_value.tv_sec = 0;
+    getitimer( ITIMER_REAL, &value );
+    
+    if(value.it_value.tv_usec != 0)
+    	return value.it_value.tv_usec;
+
     if (setitimer (ITIMER_REAL, &new, &old) < 0)
         return 0;
     else
@@ -66,7 +75,7 @@ pthread_mutex_t recv_buffer_lock = PTHREAD_MUTEX_INITIALIZER;
 int seq_stdout = -1;
 int maxWindowSize;
 int seed, mean_time;
-
+float probability_loss;
 struct dgram* recv_window[MAXDGRAMCONTENT];
 
 
@@ -79,7 +88,7 @@ main(int argc, char **argv)
         int server_port;
         char filename[MAXLINE];
         int sliding_window_size;
-        float probability_loss;
+        
 	struct socket_descripts sock_desc[10];
 	char buf[MAXLINE];
 	int count = 0;
@@ -118,6 +127,7 @@ main(int argc, char **argv)
 				break;
 			case 4: 
 				seed = atoi(buf);
+				srand(seed);
 				break;
 			case 5:
 				probability_loss = atof(buf);
@@ -336,45 +346,79 @@ main(int argc, char **argv)
 }
 
 int receive_file(int sockfd){
+
+	Signal(SIGALRM, sig_alrm);
+
 	int prev_ack = 0;
 	int windowsize = maxWindowSize;
 	pthread_t	tid;
 	Pthread_create(&tid, NULL, consumerThread, NULL);
+	int max_recv_pack = -1;
+	int retransmitted_ack_count = 0;
 
+	printf("%d\n", MAXRETRANSMISSIONACK);
 	while(1){
+		sendAck:
+		{
+			if(retransmitted_ack_count >= MAXRETRANSMISSIONACK)
+			{
+				printf("Error: Reached maximum retransmissions, server not responding\n");
+				return -1;
+			}
+
+			if(!data_loss()){
+					//printf("SENDING ACK\n");
+					struct dgram emptyDgram;
+					Pthread_mutex_lock(&recv_buffer_lock);
+					emptyDgram.ack = seq_stdout + 1;
+					Pthread_mutex_unlock(&recv_buffer_lock);
+					windowsize = min(maxWindowSize, windowsize + ( emptyDgram.ack - prev_ack));
+					windowsize = max(windowsize, 0);
+					if(prev_ack == emptyDgram.ack) 
+						retransmitted_ack_count++;
+					else
+						retransmitted_ack_count = 0;
+					prev_ack = emptyDgram.ack;
+					emptyDgram.windowsize = windowsize;
+					printf("%d %d\n", emptyDgram.ack, emptyDgram.windowsize);
+					Sendto(sockfd, (void *)&emptyDgram, sizeof(emptyDgram), 0, NULL, NULL);			
+				}
+			alarm(5000);
+		}
 
 		if (sigsetjmp(jmpbuf, 1) != 0) {
 			//send ACK - seq_stdout+1
-				struct dgram emptyDgram;
-				emptyDgram.ack = seq_stdout + 1;
-				windowsize = windowsize + ( emptyDgram.ack - prev_ack);
-				prev_ack = emptyDgram.ack;
-				emptyDgram.windowsize = windowsize;
-				Sendto(sockfd, (void *)&emptyDgram, sizeof(emptyDgram), 0, NULL, NULL);
-				alarm(200);
-				
-		}
-		
-		struct dgram recvDgram;
-		if(Recvfrom(sockfd, &recvDgram, sizeof(recvDgram), 0, NULL, NULL)){
-			//printf("%d:\t%s\n",recvDgram.seqNum, recvDgram.data);
-			if(recvDgram.seqNum >= seq_stdout + 1 && recvDgram.seqNum < seq_stdout + 1 + maxWindowSize){
-				//printf("PACKET Receving?\n");
-				Pthread_mutex_lock(&recv_buffer_lock);
-				alarm(200);
-				struct dgram* emptyDgram = (struct dgram *)malloc(sizeof(struct dgram));
-				strcpy(emptyDgram->data, recvDgram.data);
-				//printf("PACKET Receving?\n");
-				emptyDgram->seqNum = recvDgram.seqNum;
-				emptyDgram->ack = recvDgram.ack;
-				emptyDgram->eof = recvDgram.eof;
-				emptyDgram->windowsize = recvDgram.windowsize;
-				recv_window[recvDgram.seqNum % maxWindowSize] = emptyDgram;
-				windowsize--;
-				Pthread_mutex_unlock(&recv_buffer_lock);
-			}
+				goto sendAck;
 		}
 
+		struct dgram recvDgram;
+		if(Recvfrom(sockfd, &recvDgram, sizeof(recvDgram), 0, NULL, NULL) < 0){
+			printf("Recv From error \n");
+			return -1;
+		}
+		else { 
+			//printf("%d:\t%s\n",recvDgram.seqNum, recvDgram.data);
+			if(!data_loss()){
+				//printf("RECEIVING DATAGRAM\n");
+				printf("RECEIVED PACKET: %d\n", recvDgram.seqNum);
+				if(recvDgram.seqNum >= seq_stdout + 1 && recvDgram.seqNum < seq_stdout + 1 + maxWindowSize && recv_window[recvDgram.seqNum % maxWindowSize] == NULL){
+					//printf("PACKET Receving?\n");
+					printf("RECEIVED PACKET: %d\n", recvDgram.seqNum);
+					Pthread_mutex_lock(&recv_buffer_lock);
+					struct dgram* emptyDgram = (struct dgram *)malloc(sizeof(struct dgram));
+					strcpy(emptyDgram->data, recvDgram.data);
+					emptyDgram->seqNum = recvDgram.seqNum;
+					emptyDgram->ack = recvDgram.ack;
+					emptyDgram->eof = recvDgram.eof;
+					emptyDgram->windowsize = recvDgram.windowsize;
+					recv_window[recvDgram.seqNum % maxWindowSize] = emptyDgram;
+					windowsize--;
+					Pthread_mutex_unlock(&recv_buffer_lock);
+					max_recv_pack = max(max_recv_pack, recvDgram.ack);
+					alarm(5000);
+				}
+			}
+		}
 
 	}
 }
@@ -382,17 +426,23 @@ int receive_file(int sockfd){
 
 void * consumerThread(void *arg){
 	int eof = 0;
-	srand(seed);
+	//srand(seed);
 	pthread_detach(pthread_self());
 	while(1){
 		double sleep_time = -1*mean_time*log((double)(rand()*1.0/RAND_MAX));
 		//printf("THREAD: %f\n", sleep_time);
-
+		//printf("CONSUMER THREAD SLEEPS FOR: %f\n", sleep_time);
 		usleep(sleep_time);
+
 		Pthread_mutex_lock(&recv_buffer_lock);
+		//printf("WAKES UP");
+		//if(recv_window[(seq_stdout+1)%maxWindowSize] != NULL)
+		//printf(": %d\n", recv_window[(seq_stdout+1)%maxWindowSize]->seqNum);
+
 		while(recv_window[(seq_stdout+1)%maxWindowSize] != NULL){
 			//printf("%d\n", seq_stdout+1);
 			//printf("%s\n", recv_window[(seq_stdout+1)%maxWindowSize]->data);
+			printf("TO STDOUT PACKET: %d EOF: %d\n", recv_window[(seq_stdout+1)%maxWindowSize]->seqNum, recv_window[(seq_stdout+1)%maxWindowSize]->eof);
 			Fputs(recv_window[(seq_stdout+1)%maxWindowSize]->data, stdout);
 			if(recv_window[(seq_stdout+1)%maxWindowSize]->eof == 1)
 				eof = 1;
@@ -409,4 +459,13 @@ void * consumerThread(void *arg){
 static void sig_alrm(int signo){
 	
 	siglongjmp(jmpbuf, 1);
+}
+
+int data_loss(){
+	float loss = (rand()*1.0/RAND_MAX);
+	//printf("%f\n", loss);
+	if(loss <= probability_loss){
+		return 1;
+	}
+	return 0;
 }

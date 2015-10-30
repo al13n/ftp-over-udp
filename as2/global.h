@@ -35,6 +35,7 @@
 
 #define MAXDGRAMCONTENT 4096
 #define MAXDUPS 3
+#define MAXRETRANSMISSIONACK 52
 
 struct socket_descripts
 {
