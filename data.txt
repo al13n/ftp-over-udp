@@ -1,0 +1,95 @@
+Your friend is working as a camp counselor, and he is in charge of
+organizing activities for a set of junior-high-school-age campers. One of
+his plans is the following mini-triathalon exercise: each contestant must
+swim 20 laps of a pool, then bike 10 miles, then run 3 miles. The plan is
+to send the contestants out in a staggered fashion, via the following rule:
+the contestants must use the pool one at a time. In other words, first one
+contestant swims the 20 laps, gets out, and starts biking. As soon as this
+first person is out of the pool, a second contestant begins swimming the
+20 laps; as soon as he or she is out and starts biking, a third contestant
+begins swimming . . . and so on.)
+Each contestant has a projected swimming time (the expected time it
+will take him or her to complete the 20 laps), a projected biking time (the
+expected time it will take him or her to complete the 10 miles of bicycling),
+and a projected running time (the time it will take him or her to complete
+the 3 miles of running). Your friend wants to decide on a schedule for the
+triathalon: an order in which to sequence the starts of the contestants.
+Let’s say that the completion time of a schedule is the earliest time at
+which all contestants will be finished with all three legs of the triathalon,
+assuming they each spend exactly their projected swimming, biking, and
+running times on the three parts. (Again, note that participants can bike
+and run simultaneously, but at most one person can be in the pool at
+any time.) What’s the best order for sending people out, if one wants the
+whole competition to be over as early as possible? More precisely, give
+an efficient algorithm that produces a schedule whose completion time
+is as small as possible.
+Proof. Our general definition of instability has four parts: This means that we
+have to make sure that none of the four bad things happens.
+First, suppose there is an instability of type (i), consisting of pairs (m, w)
+nd thus she prefers her final partner to m—a contradiction.
+Next, suppose there is an instability of type (ii), consisting of a pair
+diction.
+Third, suppose there is an instability of type (iii), consisting of a pair
+diction.
+Finally, suppose there is an instability of type (iv), consisting of a man
+m and a woman w, neither of which is part of any pair in the matching,
+so that (m, w) ∈ F. But for m to be single, he must have proposed to every
+nonforbiddenwoman; in particular, he must have proposed to w, which means
+she would no longer be single—a contradiction
+Jon Kleinberg is a professor of Computer Science at
+Cornell University. He received his Ph.D. from M.I.T.
+in 1996. He is the recipient of an NSF Career Award,
+an ONR Young Investigator Award, an IBM Outstanding
+Innovation Award, the National Academy of Sciences
+Award for Initiatives in Research, research fellowships
+from the Packard and Sloan Foundations,
+and teaching awards from the Cornell Engineering
+College and Computer Science Department.
+Kleinberg’s research is centered around algorithms, particularly those concerned
+with the structure of networks and information, and with applications
+to information science, optimization, data mining, and computational biology.
+His work on network analysis using hubs and authorities helped form the
+foundation for the current generation of Internet search engines.
+´Eva Tardos is a professor of Computer Science at Cornell
+University. She received her Ph.D. from E¨otv¨os
+University in Budapest, Hungary in 1984. She is a
+member of the American Academy of Arts and Sciences,
+and an ACM Fellow; she is the recipient of an
+NSF Presidential Young Investigator Award, the Fulkerson
+Prize, research fellowships from the Guggenheim,
+Packard, and Sloan Foundations, and teaching
+awards from the Cornell Engineering College and
+Computer Science Department.
+Tardos’s research interests are focused on the design and analysis of
+algorithms for problems on graphs or networks. She is most known for her
+work on network-flow algorithms and approximation algorithms for network
+problems. Her recent work focuses on algorithmic game theory, an emerging
+area concerned with designing systems and algorithms for selfish users.
+Algorithmic ideas are pervasive, and their reach is apparent in examples both
+within computer science and beyond. Some of the major shifts in Internet
+routing standards can be viewed as debates over the deficiencies of one
+shortest-path algorithm and the relative advantages of another. The basic
+notions used by biologists to express similarities among genes and genomes
+have algorithmic definitions. The concerns voiced by economists over the
+feasibility of combinatorial auctions in practice are rooted partly in the fact that
+these auctions contain computationally intractable search problems as special
+cases. And algorithmic notions aren’t just restricted to well-known and longstanding
+problems; one sees the reflections of these ideas on a regular basis,
+in novel issues arising across a wide range of areas. The scientist from Yahoo!
+who told us over lunch one day about their system for serving ads to users was
+describing a set of issues that, deep down, could be modeled as a network flow
+problem. So was the former student, now a management consultant working
+on staffing protocols for large hospitals, whom we happened to meet on a trip
+to New York City.
+The point is not simply that algorithms have many applications. The
+deeper issue is that the subject of algorithms is a powerful lens through which
+to view the field of computer science in general. Algorithmic problems form
+the heart of computer science, but they rarely arrive as cleanly packaged,
+mathematically precise questions. Rather, they tend to come bundled together
+with lots of messy, application-specific detail, some of it essential, some of it
+extraneous. As a result, the algorithmic enterprise consists of two fundamental
+components: the task of getting to the mathematically clean core of a problem,
+and then the task of identifying the appropriate algorithm design techniques,
+based on the structure of the problem. These two components interact: the
+more comfortable one is with the full array of possible design techniques,
+the more one starts to recognize the clean formulations that lie within messy

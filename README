@@ -1,0 +1,58 @@
+
+
+				+-+-+-+-+-+-+-
+					README   
+				+-+-+-+-+-+-+-
+
+Team Members
+- Dongju Ok (#110012445)
+	: I implement the operation part of assignment 2.
+- Akshit Poddar (#110616667)
+	: Added relaiability to UDP 
+
+-----------------
+	USE:
+-----------------
+1. untar the assignment tar using the command:
+   tar -xvf assignment-2.tar
+2. Run make
+   make
+
+3. Run Server:
+   ./server
+4. Run Client:
+   ./client
+
+
+
+
+Explanation of Assignment 2
+------------------
+	OPERATION
+------------------
+1. Item 1 of the section Operation
+: I establish struct socket_descripts for following information of each socket in client side. We may get sockfd, ip_addr and net_mask member of this sturuct from Get_ifi_info_plus function which the professor give us. Next step, we should calculate subnet address through ip_addrs & net_mask. At this point, according to the instruction, we would get longest prefix subnet mask address. This is because that when server and client is connected in same local network, we should use ip_addr and net_mask with longest prefix subnet mask due to decreasing packet in the network. I will explain how to get longest subnet mask. In the client side, each multi-homed IP is calculated by BIT AND operation with their own net_mask. Also, host IP address is calculated with same way of the previous case. If both output is same, host and client should be in same local network. We may do iterlatively with every multi-homed IPs. After that, the biggest sbunet mask(i.e. the longest subnet mask) is determined, and its ip_addr and net_mask can be used as the client address to access the host.   
+
+struct socket_descripts
+{
+	int sockfd;
+	struct in_addr *ip_addr;
+	struct in_addr * net_mask;
+	struct in_addr *subment;
+}
+
+------------------
+	RELIABILITY
+------------------
+
+2. Timeout mechanism on the server side:
+
+: A timeout mechanism based on the RTT of the messages on the network was implemented. All float variables were changed to int, and the calculations were changed accordingly. This along with advertised window sizes allowed for flow control over the network. 
+
+3. Reliabilty and Flow Control:
+
+: Reliability and Flow Control was exercised through a sliding window mechanism advertised by the receiver, cumulative acknowledgements and fast retransmit. We made retransmit of packet from the server of a packet only when we receive a number of duplicate acknowledgements from the client, because it might have been possible for the client to do some processing after it sent an acknowlegement. We use slow start to learn about the network RTT, and as a mesaure of congestion control and avoidance. The measured RTO also allowed for an exponential backoff mechanism to avoid congestion. From the client side. after it receives a packet, it waits for some time before sending a acknowledgement so that it makes possible to send cumulative acknowledgements. The packets are also stored in order, and the output is shown in an orderly fashion. Retransmission of unacknowledged packets from the server are not timed by the RTT as per Karn's algorithm, and it also serves as a window probe when the advertised window by receiver is shown to be zero.
+
+4. EOF marker:
+
+: An End Of File (EOF) marker is sent by the server to the client in it's packet, to handle the case of termination of consumer thread, and the 'short' segment.
